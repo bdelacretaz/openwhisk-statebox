@@ -12,7 +12,8 @@ const StateStore = require('./state-store.js');
 const statebox = new Statebox({});
 let store;
 const EXPIRATION_SECONDS = 300;
-const VERSION = '1.10';
+const VERSION = '1.11';
+const dynamicTaskName = 'someAdditionalTask';
 
 // Get suspend data, what must be saved
 // to restart the state machine after suspending
@@ -37,6 +38,13 @@ function defaultStateMachine() {
       StartAt: 'A',
       States: {
         A: {
+          Type: 'Task',
+          InputPath: '$.values',
+          ResultPath: '$.values.value',
+          Resource: `module:${dynamicTaskName}`,
+          Next: 'Aprime',
+        },
+        Aprime: {
           Type: 'Task',
           InputPath: '$.values',
           ResultPath: '$.values.value',
@@ -127,7 +135,16 @@ const main = (params = {}) => {
   input.redis.port = params.port ? params.port : 6379;
 
   const result = new Promise(async (resolve, reject) => {
-    store = new StateStore({ host: input.redis.host, port: input.redis.port })
+    store = new StateStore({ host: input.redis.host, port: input.redis.port });
+
+    // Try dynamic resource name (to use later with OpenWhisk actions)
+    MODULE_RESOURCES[dynamicTaskName] = class WhichNameToUse {
+    // eslint-disable-next-line class-methods-use-this
+      run(event, context) {
+        console.log(`RES:increment ${event.value} by 5 `);
+        context.sendTaskSuccess(event.value + 5);
+      }
+    };
 
     // Create module resources and run state machine
     await statebox.ready;
