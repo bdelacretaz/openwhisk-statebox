@@ -127,6 +127,13 @@ const MODULE_RESOURCES = {
   },
 };
 
+class RunLog {
+  // eslint-disable-next-line class-methods-use-this
+  run(event) {
+    console.log(`RUN with ${JSON.stringify(event, null, 2)}`);
+  }
+}
+
 // OpenWhisk action code
 const main = (params = {}) => {
   const input = { values: {}, redis: {} };
@@ -138,9 +145,10 @@ const main = (params = {}) => {
     store = new StateStore({ host: input.redis.host, port: input.redis.port });
 
     // Try dynamic resource name (to use later with OpenWhisk actions)
-    MODULE_RESOURCES[dynamicTaskName] = class WhichNameToUse {
+    MODULE_RESOURCES[dynamicTaskName] = class extends RunLog {
     // eslint-disable-next-line class-methods-use-this
       run(event, context) {
+        super.run(event, context);
         console.log(`RES:increment ${event.value} by 5 `);
         context.sendTaskSuccess(event.value + 5);
       }
