@@ -14,8 +14,7 @@ allowing the state machine to be restarted.
 The continuation stores the state machine definition and the current context
 values. 
 
-State _Tasks_ however, call other OpenWhisk Actions, so modifying their
-code while a state machine is suspended will impact its execution when restarted.
+State _Tasks_ however, call other OpenWhisk Actions, so modifying those actions while a state machine is suspended will impact its execution when restarted.
 
 This is just a proof of concept for now, many things would need to be improved - my
 goal was just to get a feel for how this can work and what the limitations of such
