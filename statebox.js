@@ -1,19 +1,20 @@
 /* eslint-disable no-console */
-// Statebox example based on https://github.com/wmfs/statebox
+// Execute suspendable state machines on OpenWhisk,
+// using https://github.com/wmfs/statebox
 //
-// Executes an Amazon States Langage state machine, defined inline for now
-// See https://states-language.net/spec.html
+// Statebox uses the Amazon States Langage,
+// see https://states-language.net/spec.html
 //
-
 const Statebox = require('@wmfs/statebox');
 const uuidv4 = require('uuid/v4');
+const openwhisk = require('openwhisk');
 const StateStore = require('./state-store.js');
 
 const statebox = new Statebox({});
+
 let store;
 const EXPIRATION_SECONDS = 300;
-const VERSION = '1.11';
-const dynamicTaskName = 'someAdditionalTask';
+const VERSION = '1.12';
 
 // Get suspend data, what must be saved
 // to restart the state machine after suspending
@@ -73,63 +74,73 @@ function defaultStateMachine() {
   };
 }
 
-// Module resources are Javascript classes with 'run'
-// and optional 'init' methods) that state machines
-// can use for Task states
-function getModuleResources() { 
-  return {
-    increment: class Increment {
-      // Cannot use static run methods with statebox
-      // eslint-disable-next-line class-methods-use-this
-      run(event, context) {
-        console.log(`RES:increment ${event.value}`);
-        context.sendTaskSuccess(event.value + 1);
-      }
-    },
-    square: class Square {
+// We need a few builtin statebox "resources"
+// to suspend state machines, send responses etc.
+const BUILTIN_RESOURCES = {
+  suspend: class Suspend {
     // eslint-disable-next-line class-methods-use-this
-      run(event, context) {
-        console.log(`RES:square ${event.value}`);
-        context.sendTaskSuccess(event.value * event.value);
-      }
-    },
-    suspend: class Suspend {
-      // eslint-disable-next-line class-methods-use-this
-      async run(event, context) {
-        console.log('RES:Suspending state machine');
-        const suspendData = getSuspendData(event, context);
-        const key = await store.put(suspendData, EXPIRATION_SECONDS);
-        const successEvent = event;
-        successEvent.CONTINUATION = key;
-        const result = await store.get(key);
-        console.log(`\nCONTINUATION DATA for #${result.key}, loaded from store as ${result.data}`);
-        console.log(JSON.stringify(result.data, null, 2));
+    async run(event, context) {
+      console.log('RES:Suspending state machine');
+      const suspendData = getSuspendData(event, context);
+      const key = await store.put(suspendData, EXPIRATION_SECONDS);
+      const successEvent = event;
+      successEvent.CONTINUATION = key;
+      const result = await store.get(key);
+      console.log(`\nCONTINUATION DATA for #${result.key}, loaded from store as ${result.data}`);
+      console.log(JSON.stringify(result.data, null, 2));
 
-        // Not calling context.sendTaskSuccess stops the state machine
-        // TODO is that ok?
-        event.success(event);
-      }
-    },
-    sendResponse: class SendResponse {
-      // eslint-disable-next-line class-methods-use-this
-      run(event /* context */) {
-        console.log('RES:sendResponse');
-        const successEvent = event;
-        successEvent.elapsedMsec = new Date() - event.startTime;
-        event.success(successEvent);
-      }
-    },
+      // Not calling context.sendTaskSuccess stops the state machine
+      // TODO is there a better way?
+      event.success(event);
+    }
+  },
+  sendResponse: class SendResponse {
+    // eslint-disable-next-line class-methods-use-this
+    run(event /* context */) {
+      console.log('RES:sendResponse');
+      const successEvent = event;
+      successEvent.elapsedMsec = new Date() - event.startTime;
+      event.success(successEvent);
+    }
+  },
+};
+
+// Creates a statebox "resource" (executor class)
+// which wraps an OpenWhisk Action
+function createOWResource(name) {
+  return class {
+    // eslint-disable-next-line class-methods-use-this
+    async run(event, context) {
+      const ow = openwhisk();
+      const output = await ow.actions.invoke(
+        {
+          name,
+          blocking: true,
+          result: true,
+          params: event,
+        },
+      );
+      console.log(`OW_ACTION ${name} returns ${JSON.stringify(output, null, 2)}`);
+      context.sendTaskSuccess(output.value);
+    }
   };
 }
 
-/*
-class RunLog {
-  // eslint-disable-next-line class-methods-use-this
-  run(event) {
-    console.log(`RUN with ${JSON.stringify(event, null, 2)}`);
-  }
+// Return our module resources for statebox
+async function getModuleResources() {
+  // Start with our default resources
+  const resources = BUILTIN_RESOURCES;
+
+  // Add available OpenWhisk actions
+  // TODO we might only add those that are used in
+  // the state machine that's about to run
+  (await openwhisk().actions.list()).forEach((decl) => {
+    console.log(`Registering OW action ${decl.name} for statebox`);
+    resources[decl.name] = createOWResource(decl.name);
+  });
+
+  return resources;
 }
-*/
 
 // OpenWhisk action code
 const main = (params = {}) => {
@@ -143,7 +154,7 @@ const main = (params = {}) => {
 
     // Create module resources and run state machine
     await statebox.ready;
-    await statebox.createModuleResources(getModuleResources());
+    await statebox.createModuleResources(await getModuleResources());
 
     // Select the state machine
     if (params.continuation && params.continuation.length > 0) {
