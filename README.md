@@ -72,6 +72,7 @@ Actions that it uses:
 
 And install the main action as follows:
 
+    npm install
     rm -rf action.zip
     zip -r action.zip package.json *.js state-machines lib node_modules
     wsk -i action update statebox action.zip --web true \
