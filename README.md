@@ -1,4 +1,4 @@
-Suspendable State Machines with Apache OpenWhisk
+State Machines with Continuations, running on Apache OpenWhisk
 ===
 
 This [Apache OpenWhisk](http://openwhisk.apache.org) Action executes state machines defined using the 
