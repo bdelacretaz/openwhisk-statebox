@@ -59,7 +59,10 @@ To suspend the state machine, the `module:Suspend` resource is used:
 How to test this
 ----
 
-You'll need a Redis service that your OpenWhisk Actions can access, as well as a working
+You'll need a Redis service that your OpenWhisk Actions can access. In a pinch you can run one locally and make it
+accessible using [ngrok](https://ngrok.com/). Make sure you understand the security implications if you do this.
+
+You'll also need a working
 _wsk_ command, see [openwhisk.apache.org](http://openwhisk.apache.org) if you're not familiar with that.
 
 The below examples require the REDIS_HOST and REDIS_PORT environment variables to be set.
