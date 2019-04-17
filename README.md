@@ -25,6 +25,38 @@ Implementing a continuations mechanism for the [OpenWhisk Composer](https://gith
 I started with [statebox](https://github.com/wmfs/statebox) for this prototype as I'm not familiar
 with the composer code and wanted to play with state machines - but the mechanisms would be similar.
 
+State Machine Definitions
+----
+The [examples](./examples) folder has a few examples, here's an example state that calls an 
+OpenWhisk action:
+
+    "A": {
+        "Type": "Task",
+        "InputPath": "$.values",
+        "ResultPath": "$.values.value",
+        "Resource": "module:increment",
+        "Next": "B"
+    }
+
+And here's the code of the [`increment` action](demo-actions/increment.js) that it calls:
+
+    const main = (params = {}) => {
+        const input = params.value ? params.value : 0;
+        const increment = params.increment ? params.increment : 1;
+        return { value: input + increment };
+    };
+
+The semantics are simple in this basic example: the action takes a `value` parameter and
+returns an object that includes its new value.
+
+To suspend the state machine, the `module:Suspend` resource is used:
+
+    "Suspend": {
+        "Type": "Task",
+        "Resource": "module:suspend",
+        "Next": "C"
+    }
+
 How to test this
 ----
 
