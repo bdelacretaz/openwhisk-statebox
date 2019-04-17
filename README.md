@@ -24,6 +24,21 @@ Implementing a continuations mechanism for the [OpenWhisk Composer](https://gith
 I started with [statebox](https://github.com/wmfs/statebox) for this prototype as I'm not familiar
 with the composer code and wanted to play with state machines - but the mechanisms would be similar.
 
+Why?
+---
+The use cases that I have in mind involve human responses, like in content approval workflows where timeouts can be
+in the range of several days.
+
+A scenario for such use cases might be:
+
+ * Reach a state machine step that requires human input
+ * Send an email with the question and the URL of the state machine continuation
+ * Suspend the state machine and wait up to N days for an answer
+ * When the answer arrives, the state machine continues based on the answer provided
+ 
+The example state machines included so far do not demonstrate that yet, just the basic mechanism that would
+enable such scenarios.
+
 State Machine Definitions
 ----
 The [state-machines](./state-machines) folder has a few examples, here's an example state that calls an 
