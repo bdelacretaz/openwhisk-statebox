@@ -1,13 +1,15 @@
-/* eslint-disable no-console */
 // Execute suspendable state machines on OpenWhisk,
 // using https://github.com/wmfs/statebox
 //
 // Statebox uses the Amazon States Langage,
 // see https://states-language.net/spec.html
 //
+/* eslint-disable no-console */
+
 const Statebox = require('@wmfs/statebox');
 const uuidv4 = require('uuid/v4');
 const openwhisk = require('openwhisk');
+const demoStateMachine = require('./examples/incsquare.json');
 const StateStore = require('./state-store.js');
 
 const statebox = new Statebox({});
@@ -27,50 +29,6 @@ function getSuspendData(event, inputContext) {
     data: event,
     restartAt: context.task.definition.Next,
     stateMachine: machine,
-  };
-}
-
-// State machine definition
-// TODO should be provided as input to this function
-function defaultStateMachine() {
-  return {
-    incsquare: {
-      Comment: 'Increment and square a value',
-      StartAt: 'A',
-      States: {
-        A: {
-          Type: 'Task',
-          InputPath: '$.values',
-          ResultPath: '$.values.value',
-          Resource: 'module:increment',
-          Next: 'B',
-        },
-        B: {
-          Type: 'Task',
-          InputPath: '$.values',
-          ResultPath: '$.values.value',
-          Resource: 'module:square',
-          Next: 'Suspend',
-        },
-        Suspend: {
-          Type: 'Task',
-          Resource: 'module:suspend',
-          Next: 'C',
-        },
-        C: {
-          Type: 'Task',
-          InputPath: '$.values',
-          ResultPath: '$.values.value',
-          Resource: 'module:increment',
-          Next: 'SendResponse',
-        },
-        SendResponse: {
-          Type: 'Task',
-          Resource: 'module:sendResponse',
-          End: true,
-        },
-      },
-    },
   };
 }
 
@@ -96,7 +54,7 @@ const BUILTIN_RESOURCES = {
   },
   sendResponse: class SendResponse {
     // eslint-disable-next-line class-methods-use-this
-    run(event /* context */) {
+    run(event) {
       console.log('RES:sendResponse');
       const successEvent = event;
       successEvent.elapsedMsec = new Date() - event.startTime;
@@ -120,7 +78,7 @@ function createOWResource(name) {
           params: event,
         },
       );
-      console.log(`OW_ACTION ${name} returns ${JSON.stringify(output, null, 2)}`);
+      console.log(`RES:Action ${name} returns ${JSON.stringify(output, null, 2)}`);
       context.sendTaskSuccess(output.value);
     }
   };
@@ -134,22 +92,43 @@ async function getModuleResources() {
   // Add available OpenWhisk actions
   // TODO we might only add those that are used in
   // the state machine that's about to run
+  const actions = [];
   (await openwhisk().actions.list()).forEach((decl) => {
-    console.log(`Registering OW action ${decl.name} for statebox`);
+    actions.push(decl.name);
     resources[decl.name] = createOWResource(decl.name);
   });
+  console.log(`OpenWhisk actions registered for statebox: ${actions}`);
 
   return resources;
 }
 
+function getStateMachine(params) {
+  // eslint-disable-next-line no-underscore-dangle
+  if (params.__ow_method === 'POST' && params.__ow_body) {
+    // eslint-disable-next-line no-underscore-dangle
+    return params.__ow_body.statemachine;
+  }
+  return null;
+}
+
 // OpenWhisk action code
 const main = (params = {}) => {
+  console.log(`params=${JSON.stringify(params, null, 2)}`);
+
   const input = { values: {}, redis: {} };
   input.startTime = new Date();
   input.redis.host = params.host ? params.host : 'localhost';
   input.redis.port = params.port ? params.port : 6379;
 
   const result = new Promise(async (resolve, reject) => {
+    // eslint-disable-next-line no-underscore-dangle
+    if (params.__ow_method !== 'POST') {
+      const out = { status: 405, body: 'Only POST is supported' };
+      console.log(out);
+      reject(out);
+      return;
+    }
+
     store = new StateStore({ host: input.redis.host, port: input.redis.port });
 
     // Create module resources and run state machine
@@ -157,7 +136,7 @@ const main = (params = {}) => {
     await statebox.createModuleResources(await getModuleResources());
 
     // Select the state machine
-    if (params.continuation && params.continuation.length > 0) {
+    if (params.continuation && params.continuation.length > 1) {
       console.log(`Restarting from continuation ${params.continuation}`);
       const data = await store.get(params.continuation);
       if (!data.data) reject(new Error(`Continuation not found or expired: ${params.continuation}`));
@@ -166,7 +145,11 @@ const main = (params = {}) => {
       input.values = data.data.data.values;
     } else {
       input.values.value = params.input ? parseInt(params.input, 10) : 1;
-      input.stateMachine = defaultStateMachine();
+      input.stateMachine = getStateMachine(params);
+      if (!input.stateMachine) {
+        console.log('No state machine definition provided, using demo state machine');
+        input.stateMachine = demoStateMachine.statemachine;
+      }
     }
 
     // Use a unique state machine name for each run
@@ -191,7 +174,7 @@ const main = (params = {}) => {
         console.log('RESPONSE:');
         console.log(data);
         resolve({ body: data });
-      }
+      },
     };
 
     if (params.continuation) {
@@ -206,9 +189,12 @@ const main = (params = {}) => {
       reject(e);
     }
   });
+
   result.finally(async () => {
-    console.log('Closing StateStore');
-    await store.close();
+    if (store) {
+      console.log('Closing StateStore');
+      await store.close();
+    }
   });
 
   return result;
@@ -220,6 +206,8 @@ if (require.main === module) {
     continuation: process.argv[3],
     host: process.argv[4],
     port: process.argv[5],
+    __ow_method: 'POST',
+    __ow_body: process.argv[7],
   });
 }
 

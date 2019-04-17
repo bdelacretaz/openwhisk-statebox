@@ -1,0 +1,41 @@
+{
+  "statemachine": {
+    "incsquare": {
+      "Comment": "Increment and square a value",
+      "StartAt": "A",
+      "States": {
+        "A": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "B"
+        },
+        "B": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:square",
+          "Next": "Suspend"
+        },
+        "Suspend": {
+          "Type": "Task",
+          "Resource": "module:suspend",
+          "Next": "C"
+        },
+        "C": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "SendResponse"
+        },
+        "SendResponse": {
+          "Type": "Task",
+          "Resource": "module:sendResponse",
+          "End": true
+        }
+      }
+    }
+  }
+}
