@@ -9,8 +9,8 @@
 const Statebox = require('@wmfs/statebox');
 const uuidv4 = require('uuid/v4');
 const openwhisk = require('openwhisk');
-const demoStateMachine = require('./examples/incsquare.json');
-const StateStore = require('./state-store.js');
+const demoStateMachine = require('./state-machines/incsquare.json');
+const StateStore = require('./lib/state-store.js');
 
 const statebox = new Statebox({});
 
