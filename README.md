@@ -1,38 +1,119 @@
-Statebox experiments with Apache OpenWhisk
+Suspendable State Machines with Apache OpenWhisk
 ===
 
-Experimenting with https://github.com/wmfs/statebox in an OpenWhisk environment, to run state machines with continuations:
-a state machine can be paused, potentially for a long time, by saving its state in Redis. A continuation ID is output when
-that happens, allowing the state machine to be restarted from the same point and with the same context data later.
+This OpenWhisk Action executes state machines defined using the 
+[Amazon States Language](https://states-language.net/spec.html), using
+the [statebox](https://github.com/wmfs/statebox) library.
 
-To test this locally (requires a Redis server at localhost 6379) use:
+A _Suspend_ task allows the current execution to be suspended, with its
+state stored in Redis. 
 
-    npm install
-    node statebox.js 5
-    
-And to test the continuations feature, note the `_CONTINUATION` value that's output
-and call the script with that value as its second argument, such as
+A _continuation ID_ is returned when that happens,
+allowing the state machine to be restarted.
 
-    node statebox.js 0 34bcdb33-ee54-4efd-963c-4931fd3b3855
-    
-which restarts the state machine from where it was suspended.    
-    
-Test as follows, on an OpenWhisk setup:
+The continuation stores the state machine definition and the current context
+values. 
 
-    $ zip -r action.zip package.json *.js examples node_modules
-    $ wsk -i action update statebox action.zip --web true --param host $REDIS_HOST --param port $REDIS_PORT --kind nodejs:10
-    ok: created action statebox
+State _Tasks_ however, call other OpenWhisk Actions, so modifying their
+code while a state machine is suspended will impact its execution when restarted.
 
-    $ export URL=$(wsk -i action get statebox --url | grep http)
+This is just a proof of concept for now, many things would need to be improved - my
+goal was just to get a feel for how this can work and what the limitations of such
+an approach are.
 
-    $ curl -L -k "$URL?input=5"
-    
-or, to restart from a continuation as shown above:
+Implementing a continuations mechanism for the [OpenWhisk Composer](https://github.com/apache/incubator-openwhisk-composer) would also make sense, either in addition to or instead of this.
+I started with [statebox](https://github.com/wmfs/statebox) for this prototype as I'm not familiar
+with the composer code and wanted to play with state machines - but the mechanisms would be similar.
 
-    $ export K=<continuation ID>
-    $ curl -s -L -k "$URL?continuation=$K"
+How to test this
+----
 
-And then to see what happened:
+You'll need a Redis service that your OpenWhisk Actions can access, as well as a working
+_wsk_ command, see openwhisk.apache.org if you're not familiar with that.
 
-    $ wsk -i activation get --last
-    $ wsk -i activation logs --last
+The below examples require the REDIS_HOST and REDIS_PORT environment variables to be set.
+
+To run the [incsquare](state-machines/incsquare.json) example, install the _increment_ and _square_
+Actions that it uses:
+
+    wsk action update increment demo-actions/increment.js
+    wsk action update square demo-actions/square.js
+
+And install the main action as follows:
+
+    rm -rf action.zip
+    zip -r action.zip package.json *.js state-machines lib node_modules
+    wsk -i action update statebox action.zip --web true \
+        --param host $REDIS_HOST --param port $REDIS_PORT --kind nodejs:10
+
+You can then get the action's URL:
+
+    export URL=$(wsk -i action get statebox --url | grep http)
+
+And call it as in this example, providing a state machine definition and
+an input value:
+
+    curl \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -d @state-machines/incsquare.json \
+        -L \
+        "$URL?input=6"
+
+The above example uses the `incsquare` demo state machine which increments and squares
+ the input value, suspends execution and return a continuation:    
+
+    {
+        "CONTINUATION": "3e08ff74-cd0d-4710-8213-1495f00ba4e6",
+        "constants": {
+            "redis_host": "redis.example.com",
+            "redis_port": 12930,
+            "version": "1.12"
+        },
+        "values": {
+            "value": 49
+        }
+    }
+
+Which you can pass to the action to restart execution:
+
+    export K=<the continuation value that you got>
+    curl -XPOST -L "$URL?continuation=$K"
+
+Which finishes that state machine's execution and returns the final result:
+
+    {
+        "constants": {
+            "redis_host": "redis.example.com",
+            "redis_port": 12930,
+            "restartedFrom": "3e08ff74-cd0d-4710-8213-1495f00ba4e6",
+            "version": "1.12"
+        },
+        "values": {
+            "value": 50
+        }
+    }
+
+Continuations have a default lifetime of 300 seconds and error handling
+is still minimal.    
+
+To see what happened you can use `wsk activation list`, `wsk activation logs` etc. - see
+the [wsk documentation](https://github.com/apache/incubator-openwhisk/blob/master/docs/cli.md#openwhisk-cli)
+for more info.
+
+What's next
+---
+The [Amazon States Language](https://states-language.net/spec.html) spec includes _Parallel_ tasks which will
+probably cause problems with this basic implementation, in case only one branch is suspended. Not tested so far.
+
+Only single input values are supported for now, the code will need to be adapted to support JSON objects as 
+input values.
+
+So far it's not possible to provide additional input when restarting suspended state machines, some logic should
+be added to merge additional values when doing that. A common use case is to suspend a state machine after 
+requesting human input, which will need to be merged with the current execution data.
+
+
+
+
+
