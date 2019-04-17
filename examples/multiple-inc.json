@@ -1,0 +1,48 @@
+{
+  "statemachine": {
+    "multipleinc": {
+      "Comment": "Increment a value multiple times",
+      "StartAt": "A",
+      "States": {
+        "A": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "B"
+        },
+        "B": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "C"
+        },
+        "C": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "Suspend"
+        },
+        "Suspend": {
+          "Type": "Task",
+          "Resource": "module:suspend",
+          "Next": "D"
+        },
+        "D": {
+          "Type": "Task",
+          "InputPath": "$.values",
+          "ResultPath": "$.values.value",
+          "Resource": "module:increment",
+          "Next": "SendResponse"
+        },
+        "SendResponse": {
+          "Type": "Task",
+          "Resource": "module:sendResponse",
+          "End": true
+        }
+      }
+    }
+  }
+}

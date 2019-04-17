@@ -19,7 +19,7 @@ which restarts the state machine from where it was suspended.
     
 Test as follows, on an OpenWhisk setup:
 
-    $ zip -r action.zip package.json *.js node_modules
+    $ zip -r action.zip package.json *.js examples node_modules
     $ wsk -i action update statebox action.zip --web true --param host $REDIS_HOST --param port $REDIS_PORT --kind nodejs:10
     ok: created action statebox
 

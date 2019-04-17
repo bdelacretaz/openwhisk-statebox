@@ -43,9 +43,6 @@ const BUILTIN_RESOURCES = {
       const key = await store.put(suspendData, EXPIRATION_SECONDS);
       const successEvent = event;
       successEvent.CONTINUATION = key;
-      const result = await store.get(key);
-      console.log(`\nCONTINUATION DATA for #${result.key}, loaded from store as ${result.data}`);
-      console.log(JSON.stringify(result.data, null, 2));
 
       // Not calling context.sendTaskSuccess stops the state machine
       // TODO is there a better way?
@@ -57,7 +54,6 @@ const BUILTIN_RESOURCES = {
     run(event) {
       console.log('RES:sendResponse');
       const successEvent = event;
-      successEvent.elapsedMsec = new Date() - event.startTime;
       event.success(successEvent);
     }
   },
@@ -84,7 +80,8 @@ function createOWResource(name) {
   };
 }
 
-// Return our module resources for statebox
+// Return our module resources for statebox,
+// including available OpenWhisk actions
 async function getModuleResources() {
   // Start with our default resources
   const resources = BUILTIN_RESOURCES;
@@ -102,28 +99,18 @@ async function getModuleResources() {
   return resources;
 }
 
-function getStateMachine(params) {
-  // eslint-disable-next-line no-underscore-dangle
-  if (params.__ow_method === 'POST' && params.__ow_body) {
-    // eslint-disable-next-line no-underscore-dangle
-    return params.__ow_body.statemachine;
-  }
-  return null;
-}
-
 // OpenWhisk action code
 const main = (params = {}) => {
-  console.log(`params=${JSON.stringify(params, null, 2)}`);
-
   const input = { values: {}, redis: {} };
-  input.startTime = new Date();
   input.redis.host = params.host ? params.host : 'localhost';
   input.redis.port = params.port ? params.port : 6379;
 
   const result = new Promise(async (resolve, reject) => {
+    const expect = 'post';
     // eslint-disable-next-line no-underscore-dangle
-    if (params.__ow_method !== 'POST') {
-      const out = { status: 405, body: 'Only POST is supported' };
+    if (params.__ow_method !== expect) {
+      // eslint-disable-next-line no-underscore-dangle
+      const out = { status: 405, body: `Expected ${expect} method, got ${params.__ow_method}` };
       console.log(out);
       reject(out);
       return;
@@ -139,14 +126,17 @@ const main = (params = {}) => {
     if (params.continuation && params.continuation.length > 1) {
       console.log(`Restarting from continuation ${params.continuation}`);
       const data = await store.get(params.continuation);
-      if (!data.data) reject(new Error(`Continuation not found or expired: ${params.continuation}`));
-      console.log(`CONTINUE FROM ${JSON.stringify(data, null, 2)}`);
+      if (!data.data) {
+        reject(new Error(`Continuation not found or expired: ${params.continuation}`));
+        return;
+      }
       input.stateMachine = data.data.stateMachine;
       input.values = data.data.data.values;
     } else {
       input.values.value = params.input ? parseInt(params.input, 10) : 1;
-      input.stateMachine = getStateMachine(params);
-      if (!input.stateMachine) {
+      if (params.statemachine) {
+        input.stateMachine = params.statemachine;
+      } else {
         console.log('No state machine definition provided, using demo state machine');
         input.stateMachine = demoStateMachine.statemachine;
       }
@@ -164,10 +154,8 @@ const main = (params = {}) => {
     const stateMachineInput = {
       constants: {
         version: VERSION,
-        start: input.values.input,
-        startTime: input.startTime,
-        host: input.redis.host,
-        port: input.redis.port,
+        redis_host: input.redis.host,
+        redis_port: input.redis.port,
       },
       values: input.values,
       success: (data) => {
@@ -206,7 +194,7 @@ if (require.main === module) {
     continuation: process.argv[3],
     host: process.argv[4],
     port: process.argv[5],
-    __ow_method: 'POST',
+    __ow_method: 'post',
     __ow_body: process.argv[7],
   });
 }
