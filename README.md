@@ -1,7 +1,7 @@
 Suspendable State Machines with Apache OpenWhisk
 ===
 
-This OpenWhisk Action executes state machines defined using the 
+This [Apache OpenWhisk](http://openwhisk.apache.org) Action executes state machines defined using the 
 [Amazon States Language](https://states-language.net/spec.html), using
 the [statebox](https://github.com/wmfs/statebox) library.
 
