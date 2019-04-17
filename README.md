@@ -96,7 +96,8 @@ an input value:
         "$URL?input=6"
 
 The above example uses the `incsquare` demo state machine which increments and squares
- the input value, suspends execution and return a continuation:    
+ the input value, suspends execution and returns the current state values along with
+ a continuation ID:
 
     {
         "CONTINUATION": "3e08ff74-cd0d-4710-8213-1495f00ba4e6",
@@ -112,7 +113,7 @@ The above example uses the `incsquare` demo state machine which increments and s
 
 Which you can pass to the action to restart execution:
 
-    export K=<the continuation value that you got>
+    export K=<the continuation ID that you got>
     curl -XPOST -L "$URL?continuation=$K"
 
 Which finishes that state machine's execution and returns the final result:
