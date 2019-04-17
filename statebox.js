@@ -41,13 +41,6 @@ function defaultStateMachine() {
           Type: 'Task',
           InputPath: '$.values',
           ResultPath: '$.values.value',
-          Resource: `module:${dynamicTaskName}`,
-          Next: 'Aprime',
-        },
-        Aprime: {
-          Type: 'Task',
-          InputPath: '$.values',
-          ResultPath: '$.values.value',
           Resource: 'module:increment',
           Next: 'B',
         },
@@ -83,56 +76,60 @@ function defaultStateMachine() {
 // Module resources are Javascript classes with 'run'
 // and optional 'init' methods) that state machines
 // can use for Task states
-const MODULE_RESOURCES = {
-  increment: class Increment {
-    // Cannot use static run methods with statebox
+function getModuleResources() { 
+  return {
+    increment: class Increment {
+      // Cannot use static run methods with statebox
+      // eslint-disable-next-line class-methods-use-this
+      run(event, context) {
+        console.log(`RES:increment ${event.value}`);
+        context.sendTaskSuccess(event.value + 1);
+      }
+    },
+    square: class Square {
     // eslint-disable-next-line class-methods-use-this
-    run(event, context) {
-      console.log(`RES:increment ${event.value}`);
-      context.sendTaskSuccess(event.value + 1);
-    }
-  },
-  square: class Square {
-    // eslint-disable-next-line class-methods-use-this
-    run(event, context) {
-      console.log(`RES:square ${event.value}`);
-      context.sendTaskSuccess(event.value * event.value);
-    }
-  },
-  suspend: class Suspend {
-    // eslint-disable-next-line class-methods-use-this
-    async run(event, context) {
-      console.log('RES:Suspending state machine');
-      const suspendData = getSuspendData(event, context);
-      const key = await store.put(suspendData, EXPIRATION_SECONDS);
-      const successEvent = event;
-      successEvent.CONTINUATION = key;
-      const result = await store.get(key);
-      console.log(`\nCONTINUATION DATA for #${result.key}, loaded from store as ${result.data}`);
-      console.log(JSON.stringify(result.data, null, 2));
+      run(event, context) {
+        console.log(`RES:square ${event.value}`);
+        context.sendTaskSuccess(event.value * event.value);
+      }
+    },
+    suspend: class Suspend {
+      // eslint-disable-next-line class-methods-use-this
+      async run(event, context) {
+        console.log('RES:Suspending state machine');
+        const suspendData = getSuspendData(event, context);
+        const key = await store.put(suspendData, EXPIRATION_SECONDS);
+        const successEvent = event;
+        successEvent.CONTINUATION = key;
+        const result = await store.get(key);
+        console.log(`\nCONTINUATION DATA for #${result.key}, loaded from store as ${result.data}`);
+        console.log(JSON.stringify(result.data, null, 2));
 
-      // Not calling context.sendTaskSuccess stops the state machine
-      // TODO is that ok?
-      event.success(event);
-    }
-  },
-  sendResponse: class SendResponse {
-    // eslint-disable-next-line class-methods-use-this
-    run(event /* context */) {
-      console.log('RES:sendResponse');
-      const successEvent = event;
-      successEvent.elapsedMsec = new Date() - event.startTime;
-      event.success(successEvent);
-    }
-  },
-};
+        // Not calling context.sendTaskSuccess stops the state machine
+        // TODO is that ok?
+        event.success(event);
+      }
+    },
+    sendResponse: class SendResponse {
+      // eslint-disable-next-line class-methods-use-this
+      run(event /* context */) {
+        console.log('RES:sendResponse');
+        const successEvent = event;
+        successEvent.elapsedMsec = new Date() - event.startTime;
+        event.success(successEvent);
+      }
+    },
+  };
+}
 
+/*
 class RunLog {
   // eslint-disable-next-line class-methods-use-this
   run(event) {
     console.log(`RUN with ${JSON.stringify(event, null, 2)}`);
   }
 }
+*/
 
 // OpenWhisk action code
 const main = (params = {}) => {
@@ -144,19 +141,9 @@ const main = (params = {}) => {
   const result = new Promise(async (resolve, reject) => {
     store = new StateStore({ host: input.redis.host, port: input.redis.port });
 
-    // Try dynamic resource name (to use later with OpenWhisk actions)
-    MODULE_RESOURCES[dynamicTaskName] = class extends RunLog {
-    // eslint-disable-next-line class-methods-use-this
-      run(event, context) {
-        super.run(event, context);
-        console.log(`RES:increment ${event.value} by 5 `);
-        context.sendTaskSuccess(event.value + 5);
-      }
-    };
-
     // Create module resources and run state machine
     await statebox.ready;
-    await statebox.createModuleResources(MODULE_RESOURCES);
+    await statebox.createModuleResources(getModuleResources());
 
     // Select the state machine
     if (params.continuation && params.continuation.length > 0) {
