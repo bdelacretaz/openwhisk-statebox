@@ -27,7 +27,7 @@ with the composer code and wanted to play with state machines - but the mechanis
 
 State Machine Definitions
 ----
-The [examples](./examples) folder has a few examples, here's an example state that calls an 
+The [state-machines](./state-machines) folder has a few examples, here's an example state that calls an 
 OpenWhisk action:
 
     "A": {
