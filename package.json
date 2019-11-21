@@ -17,15 +17,15 @@
   },
   "homepage": "https://github.com/bdelacretaz/openwhisk-playground#readme",
   "dependencies": {
-    "@wmfs/statebox": "^1.48.1",
-    "openwhisk": "^3.19.0",
+    "@wmfs/statebox": "^1.54.4",
+    "openwhisk": "^3.20.0",
     "redis": "^2.8.0",
-    "uuid": "^3.3.2",
-    "uuidv4": "^4.0.0"
+    "uuid": "^3.3.3",
+    "uuidv4": "^6.0.0"
   },
   "devDependencies": {
-    "eslint": "^5.16.0",
-    "eslint-config-airbnb-base": "^13.1.0",
-    "eslint-plugin-import": "^2.16.0"
+    "eslint": "^6.6.0",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-plugin-import": "^2.18.2"
   }
 }
